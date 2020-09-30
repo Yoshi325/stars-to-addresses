@@ -36,7 +36,7 @@ except ImportError:
 	sys.exit()
 
 try:
-	from urllib2 import urlopen
+	from urllib.request import urlopen
 except ImportError:
 	print "You need to install urllib2"
 	sys.exit()
@@ -74,7 +74,7 @@ def main():
     for element, attribute, url, pos in doc.body.iterlinks():
         if 'maps.google' in url:
             description = element.text or ''
-            print description.encode('UTF8')
+            print(description)
             
             if coords_in_url.search(url):
                 # Coordinates are in URL itself
@@ -83,31 +83,31 @@ def main():
             else:
                 # Load map and find coordinates in source of page
                 try:
-                    url = url.encode('ascii', 'xmlcharrefreplace')
-                    sock = urlopen(url.replace(' ','+').encode('UTF8'))
-                except Exception, e:
-                    print 'Connection problem:'
-                    print repr(e)
-                    print 'Waiting 3 minutes and trying again'
+                    sock = urlopen(url.replace(' ', '+'))
+                except Exception as e:
+                    print('Connection problem:')
+                    print(repr(e))
+                    print('Waiting 3 minutes and trying again')
                     time.sleep(180)
-                    sock = urlopen(url.replace(' ','+').encode('UTF8'))
+                    sock = urlopen(url.replace(' ', '+'))
                 content = sock.read()
+                content_string = content.decode(encoding='utf-8')
                 sock.close()
                 time.sleep(5) # Don't annoy server
                 try:
-                    latitude = lat_re.findall(content)[0]
-                    longitude = lon_re.findall(content)[0]
+                    latitude = lat_re.findall(content_string)[0]
+                    longitude = lon_re.findall(content_string)[0]
                 except IndexError:
                     latitude = ""
                     longitude = ""
                     try:
-                        lines = content.split('\n')  # --> ['Line 1', 'Line 2', 'Line 3']
+                        lines = content_string.split('\n')  # --> ['Line 1', 'Line 2', 'Line 3']
                         for line in lines:
                             if re.search('cacheResponse\(', line):
                                 splitline = line.split('(')[1].split(')')[0] + '"]'
                                 null = None
                                 values = eval(splitline)
-                                print values[8][0][1]
+                                print(values[8][0][1])
                                 longitude = str(values[0][0][1])
                                 latitude = str(values[0][0][2])
                                 continue
@@ -120,20 +120,20 @@ def main():
                                     latitude = str(splitline[2])
                                     continue
                     except IndexError:
-                        print '[Coordinates not found]'
+                        print('[Coordinates not found]')
                         continue
-                    print
+                    print()
             
-            print latitude, longitude
+            print(latitude, longitude)
             try:
                 if latitude != "":
                     location = geolocator.reverse(latitude+", "+longitude)
                     print(location.address)
                 else:
-                    print '[Invalid coordinates]'
+                    print('[Invalid coordinates]')
             except ValueError:
-                print '[Invalid coordinates]'
-            print
+                print('[Invalid coordinates]')
+            print()
             if latitude != "":
                 kml.newpoint(name=description, coords=[(float(longitude), float(latitude))])
             else:
@@ -141,8 +141,8 @@ def main():
             lst.append({'latitude': latitude,
                        'longitude': longitude,
                        'name': description,
-                       'url': url.encode(encoding='utf-8', errors='replace'),
-                       'address': location.address.encode(encoding='utf-8', errors='replace') if location else 'error'})
+                       'url': url,
+                       'address': 'error' if not location else location.address})
 
             # this is here because there's a tendancy for this script to fail part way through...
             # so at least you can get a partial result
