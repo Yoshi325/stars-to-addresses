@@ -9,87 +9,91 @@ After downloading the html file, run this script on it to get the addresses
 This script is based on https://gist.github.com/endolith/3896948
 """
 
+import re
 import sys
+import json
+import time
+
+from pprint import pprint
+from typing import List
+from traceback import format_exception
+from traceback import TracebackException
+from urllib.request import urlopen
 
 try:
-	from lxml.html import document_fromstring
+    from lxml.html import document_fromstring
 except ImportError:
-	print "You need to install lxml.html"
-	sys.exit()
+    print("You need to install lxml.html")
+    sys.exit()
 
 try:
-	from geopy.geocoders import Nominatim
+    from geopy.geocoders import Nominatim
 except ImportError:
-	print "You need to install geopy"
-	sys.exit()
+    print("You need to install geopy")
+    sys.exit()
 
 try:
-	import simplekml
+    import simplekml
 except ImportError:
-	print "You need to install simplekml"
-	sys.exit()
+    print("You need to install simplekml")
+    sys.exit()
 
-try:
-	import json
-except ImportError:
-	print "You need to install json"
-	sys.exit()
 
-try:
-	from urllib.request import urlopen
-except ImportError:
-	print "You need to install urllib2"
-	sys.exit()
+def get_formatted_exception() -> str:
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    tracebacks: List[TracebackException] = format_exception(exc_type, exc_value, exc_traceback)
+    repr_tracebacks = repr(tracebacks)
+    str_tracebacks = str(repr_tracebacks)
+    return str_tracebacks
 
-try:
-	import re
-except ImportError:
-	print "You need to install re"
-	sys.exit()
-
-try:
-	import time
-except ImportError:
-	print "You need to install time"
-	sys.exit()
 
 filename = r'GoogleBookmarks.html'
 
 def main():
     with open(filename) as bookmarks_file:
         data = bookmarks_file.read()
-    
-    geolocator = Nominatim()
+
+    # geopy.exc.ConfigurationError: Using Nominatim with default or sample
+    # `user_agent` "geopy/2.0.0" is strongly discouraged, as it violates
+    # Nominatim's ToS https://operations.osmfoundation.org/policies/nominatim/
+    # and may possibly cause 403 and 429 HTTP errors. Please specify a custom
+    # `user_agent` with `Nominatim(user_agent="my-application")` or by
+    # overriding the default `user_agent`:
+    # `geopy.geocoders.options.default_user_agent = "my-application"`.
+    geolocator = Nominatim(user_agent = __name__)
 
     kml = simplekml.Kml()
 
     lst = list()
-    
+
     # Hacky and doesn't work for all of the stars:
     lat_re = re.compile('markers:[^\]]*latlng[^}]*lat:([^,]*)')
     lon_re = re.compile('markers:[^\]]*latlng[^}]*lng:([^}]*)')
     coords_in_url = re.compile('\?q=(-?\d{,3}\.\d*),\s*(-?\d{,3}\.\d*)')
-    
+
     doc = document_fromstring(data)
     for element, attribute, url, pos in doc.body.iterlinks():
         if 'maps.google' in url:
             description = element.text or ''
             print(description)
-            
+
             if coords_in_url.search(url):
                 # Coordinates are in URL itself
                 latitude = coords_in_url.search(url).groups()[0]
                 longitude = coords_in_url.search(url).groups()[1]
             else:
                 # Load map and find coordinates in source of page
+                url_to_open: str = url.replace(' ', '+')
                 try:
-                    sock = urlopen(url.replace(' ', '+'))
-                except Exception as e:
+                    sock = urlopen(url_to_open)
+                except Exception:
                     print('Connection problem:')
-                    print(repr(e))
+                    pprint(get_formatted_exception())
+
                     print('Waiting 3 minutes and trying again')
                     time.sleep(180)
-                    sock = urlopen(url.replace(' ', '+'))
+                    sock = urlopen(url_to_open)
+
                 content = sock.read()
                 content_string = content.decode(encoding='utf-8')
                 sock.close()
@@ -123,7 +127,7 @@ def main():
                         print('[Coordinates not found]')
                         continue
                     print()
-            
+
             print(latitude, longitude)
             try:
                 if latitude != "":
@@ -138,11 +142,12 @@ def main():
                 kml.newpoint(name=description, coords=[(float(longitude), float(latitude))])
             else:
                 kml.newpoint(name=description)
+            location_address = 'error' if not location else location.address
             lst.append({'latitude': latitude,
                        'longitude': longitude,
                        'name': description,
                        'url': url,
-                       'address': 'error' if not location else location.address})
+                       'address': location_address})
 
             # this is here because there's a tendancy for this script to fail part way through...
             # so at least you can get a partial result
